@@ -50,7 +50,7 @@ export enum DeviceType {
     INDOOR_COST_DOWN_CAMERA = 100,
     CAMERA_GUN = 101,
     CAMERA_SNAIL = 102,
-    CAMERA_FG = 110, //T8150
+    CAMERA_FG = 110, //T8150,T8151
     SMART_SAFE_7400 = 140,
     SMART_SAFE_7401 = 141,
     SMART_SAFE_7402 = 142,
@@ -432,7 +432,7 @@ export enum PropertyName {
     DeviceWifiRSSI = "wifiRssi",
     DeviceWifiSignalLevel = "wifiSignalLevel",
     DeviceEnabled = "enabled",
-    DeviceAntitheftDetection= "antitheftDetection",
+    DeviceAntitheftDetection = "antitheftDetection",
     DeviceAutoNightvision = "autoNightvision",
     DeviceNightvision = "nightvision",
     DeviceStatusLed = "statusLed",
@@ -1052,7 +1052,7 @@ export const DeviceStatusLedDoorbellProperty: PropertyMetadataBoolean = {
 
 export const DeviceStatusLedT8200XProperty: PropertyMetadataBoolean = {
     ...DeviceStatusLedProperty,
-    key:ParamType.COMMAND_LED_NIGHT_OPEN,
+    key: ParamType.COMMAND_LED_NIGHT_OPEN,
     commandId: ParamType.COMMAND_LED_NIGHT_OPEN,
 };
 

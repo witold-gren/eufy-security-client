@@ -328,6 +328,7 @@ export class PushNotificationService extends TypedEmitter<PushNotificationServic
                 this.log.error(`Type ${DeviceType[normalized_message.type]} CusPush - event_time - Error:`, error);
             }
             normalized_message.station_sn = message.payload.station_sn;
+
             if (normalized_message.type === DeviceType.FLOODLIGHT)
                 normalized_message.device_sn = message.payload.station_sn;
             else
@@ -468,6 +469,29 @@ export class PushNotificationService extends TypedEmitter<PushNotificationServic
                     normalized_message.automation_id = push_data.automation_id;
                     normalized_message.click_action = push_data.click_action;
                     normalized_message.news_id = push_data.news_id;
+
+                    if (Device.isStarlight4GLTE(normalized_message.type)) {
+                        normalized_message.msg_type = push_data.msg_type;
+                        normalized_message.name = push_data.name;
+                        normalized_message.channel = push_data.channel;
+                        normalized_message.cipher = push_data.cipher;
+                        normalized_message.event_type = push_data.event_type;
+                        normalized_message.file_path = push_data.file_path !== undefined ? push_data.file_path : "";
+                        if (normalized_message.push_time) {
+                            normalized_message.push_time = push_data.trigger_time;
+                        }
+                        normalized_message.battery_powered = push_data.batt_powered !== undefined ? push_data.batt_powered === 1 ? true : false : undefined;
+                        try {
+                            normalized_message.battery_low = push_data.bat_low !== undefined ? Number.parseInt(push_data.bat_low) : undefined;
+                        } catch (error) {
+                            this.log.error(`Type ${DeviceType[normalized_message.type]} Starlight4GPushData - battery_low - Error:`, error);
+                        }
+                        normalized_message.storage_type = push_data.storage_type !== undefined ? push_data.storage_type : 1;
+                        normalized_message.unique_id = push_data.unique_id;
+                    }
+
+
+
                 }
             }
         } else if (message.payload.doorbell !== undefined) {
@@ -497,11 +521,11 @@ export class PushNotificationService extends TypedEmitter<PushNotificationServic
     }
 
     private onMessage(message: RawPushMessage): void {
-        this.log.debug("Raw push message received", message);
+        this.log.error("Raw push message received", message);
         this.emit("raw message", message);
 
         const normalized_message = this._normalizePushMessage(message);
-        this.log.debug("Normalized push message received", normalized_message);
+        this.log.error("Normalized push message received", normalized_message);
         this.emit("message", normalized_message);
     }
 
