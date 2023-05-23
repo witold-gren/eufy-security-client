@@ -27,8 +27,8 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
     private password: string;
     private ecdh: ECDH = createECDH("prime256v1");
 
-    private token: string|null = null;
-    private tokenExpiration: Date|null = null;
+    private token: string | null = null;
+    private tokenExpiration: Date | null = null;
     private renewAuthTokenJob?: schedule.Job;
 
     private log: Logger;
@@ -142,7 +142,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         if (response.statusCode === 401) {
                             const oldToken = this.token;
 
-                            this.log.debug("Invalidate token an get a new one...", { requestUrl: response.requestUrl , statusCode: response.statusCode, statusMessage: response.statusMessage });
+                            this.log.debug("Invalidate token an get a new one...", { requestUrl: response.requestUrl, statusCode: response.statusCode, statusMessage: response.statusMessage });
 
                             this.invalidateToken();
                             await this.login({ force: true });
@@ -291,7 +291,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                     },
                     enc: 0,
                     email: this.username,
-                    password:  encryptAPIData(this.password, this.ecdh.computeSecret(Buffer.from(this.SERVER_PUBLIC_KEY, "hex"))),
+                    password: encryptAPIData(this.password, this.ecdh.computeSecret(Buffer.from(this.SERVER_PUBLIC_KEY, "hex"))),
                     time_zone: new Date().getTimezoneOffset() !== 0 ? -new Date().getTimezoneOffset() * 60 * 1000 : 0,
                     transaction: `${new Date().getTime()}`
                 };
@@ -343,14 +343,14 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             this.emit("tfa request");
                         } else if (result.code == ResponseErrorCode.LOGIN_NEED_CAPTCHA || result.code == ResponseErrorCode.LOGIN_CAPTCHA_ERROR) {
                             const dataresult: CaptchaResponse = result.data;
-                            this.log.debug("Captcha verification received", { captchaId: dataresult.captcha_id, item: dataresult.item });
+                            this.log.error("Captcha verification received", { captchaId: dataresult.captcha_id, item: dataresult.item });
                             this.emit("captcha request", dataresult.captcha_id, dataresult.item);
                         } else {
-                            this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                            this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                             this.emit("connection error", new ApiResponseCodeError(`Response code not ok (${result.code}).`));
                         }
                     } else {
-                        this.log.error("Response data is missing", {code: result.code, msg: result.msg, data: result.data });
+                        this.log.error("Response data is missing", { code: result.code, msg: result.msg, data: result.data });
                         this.emit("connection error", new ApiInvalidResponseError("Response data is missing"));
                     }
                 } else {
@@ -397,7 +397,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                     this.log.info(`Requested verification code for 2FA`);
                     return true;
                 } else {
-                    this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                    this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                 }
             } else {
                 this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -422,7 +422,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return result.data.list;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -454,12 +454,12 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         const trusted_devices = await this.listTrustDevice();
                         trusted_devices.forEach((trusted_device: TrustDevice) => {
                             if (trusted_device.is_current_device === 1) {
-                                this.log.debug("This device is trusted. Token expiration extended:", { tokenExpiration: this.tokenExpiration});
+                                this.log.debug("This device is trusted. Token expiration extended:", { tokenExpiration: this.tokenExpiration });
                             }
                         });
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -494,7 +494,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         this.log.debug("Decrypted station list data", stationList);
                         return stationList;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -529,7 +529,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         this.log.debug("Decrypted device list data", deviceList);
                         return deviceList;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -644,7 +644,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         this.log.debug(`Push token OK`);
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -675,7 +675,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         this.log.debug(`Push token registered successfully`);
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -710,10 +710,10 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                     const result: ResultResponse = response.data;
                     if (result.code == 0) {
                         const dataresult = result.data;
-                        this.log.debug("New parameters set", {params: tmp_params, response: dataresult });
+                        this.log.debug("New parameters set", { params: tmp_params, response: dataresult });
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -748,7 +748,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return ciphers;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -778,7 +778,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return voices;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -806,11 +806,11 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return this.hubs;
     }
 
-    public getToken(): string|null {
+    public getToken(): string | null {
         return this.token;
     }
 
-    public getTokenExpiration(): Date|null {
+    public getTokenExpiration(): Date | null {
         return this.tokenExpiration;
     }
 
@@ -879,7 +879,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             });
                         }
                     } else {
-                        this.log.error(`${functionName} - Response code not ok`, {code: result.code, msg: result.msg });
+                        this.log.error(`${functionName} - Response code not ok`, { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error(`${functionName} - Status return code not 200`, { status: response.status, statusText: response.statusText });
@@ -948,7 +948,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return invites;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -976,7 +976,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                     if (result.code == ResponseErrorCode.CODE_WHATEVER_ERROR) {
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1008,7 +1008,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                                 return result.data.public_key;
                             }
                         } else {
-                            this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                            this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                         }
                     } else {
                         this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1064,7 +1064,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return entries;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1076,7 +1076,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return [];
     }
 
-    public async getHouseDetail(houseID: string): Promise<HouseDetail|null> {
+    public async getHouseDetail(houseID: string): Promise<HouseDetail | null> {
         if (this.connected) {
             try {
                 const response = await this.request({
@@ -1096,7 +1096,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return houseDetail;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1125,7 +1125,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return result.data as Array<HouseListResponse>;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1158,7 +1158,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             return houseInviteList;
                         }
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1189,7 +1189,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                     if (result.code == ResponseErrorCode.CODE_WHATEVER_ERROR) {
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1205,7 +1205,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return this.persistentData;
     }
 
-    public async getPassportProfile(): Promise<PassportProfileResponse|null> {
+    public async getPassportProfile(): Promise<PassportProfileResponse | null> {
         try {
             const response = await this.request({
                 method: "get",
@@ -1223,7 +1223,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         return profile;
                     }
                 } else {
-                    this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                    this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                 }
             } else {
                 this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1234,7 +1234,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return null;
     }
 
-    public async addUser(deviceSN: string, nickname: string, stationSN = ""): Promise<AddUserResponse|null> {
+    public async addUser(deviceSN: string, nickname: string, stationSN = ""): Promise<AddUserResponse | null> {
         if (this.connected) {
             try {
                 const response = await this.request({
@@ -1253,7 +1253,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         if (result.data)
                             return result.data as AddUserResponse;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1283,7 +1283,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                     if (result.code == ResponseErrorCode.CODE_WHATEVER_ERROR) {
                         return true;
                     } else {
-                        this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                        this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
                 } else {
                     this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1295,7 +1295,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return false;
     }
 
-    public async getUsers(deviceSN: string, stationSN: string): Promise<Array<User>|null> {
+    public async getUsers(deviceSN: string, stationSN: string): Promise<Array<User> | null> {
         try {
             const response = await this.request({
                 method: "get",
@@ -1309,7 +1309,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         return usersResponse.user_list;
                     }
                 } else {
-                    this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                    this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                 }
             } else {
                 this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
@@ -1320,7 +1320,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return null;
     }
 
-    public async getUser(deviceSN: string, stationSN: string, shortUserId: string): Promise<User|null> {
+    public async getUser(deviceSN: string, stationSN: string, shortUserId: string): Promise<User | null> {
         try {
             const users = await this.getUsers(deviceSN, stationSN);
             if (users !== null) {
@@ -1359,7 +1359,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                         if (result.code == ResponseErrorCode.CODE_WHATEVER_ERROR) {
                             return true;
                         } else {
-                            this.log.error("Response code not ok", {code: result.code, msg: result.msg });
+                            this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                         }
                     } else {
                         this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });

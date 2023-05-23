@@ -136,6 +136,11 @@ export enum HB3PairedDevicePushEvent {
     STRANGER_PERSON_DETECTION = 3112,
 }
 
+export enum Starlight4GLTEPushEvent {
+    MOTION_DETECTION = 3101,
+    FACE_DETECTION = 3102,
+}
+
 export enum HB3PairedDeviceMessageType {
     SECURITY_EVT = 1,
     TFCARD_EVT = 2,
