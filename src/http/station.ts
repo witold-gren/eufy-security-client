@@ -1,16 +1,17 @@
 import { TypedEmitter } from "tiny-typed-emitter";
 import { Readable } from "stream";
 import { Logger } from "ts-log";
+import date from "date-and-time";
 
 import { HTTPApi } from "./api";
 import { AlarmMode, AlarmTone, NotificationSwitchMode, DeviceType, FloodlightMotionTriggeredDistance, GuardMode, NotificationType, ParamType, PowerSource, PropertyName, StationProperties, TimeFormat, CommandName, StationCommands, StationGuardModeKeyPadProperty, StationCurrentModeKeyPadProperty, StationAutoEndAlarmProperty, StationSwitchModeWithAccessCodeProperty, StationTurnOffAlarmWithButtonProperty, PublicKeyType, MotionDetectionMode, VideoTypeStoreToNAS, HB3DetectionTypes } from "./types";
 import { SnoozeDetail, StationListResponse, StationSecuritySettings } from "./models"
 import { ParameterHelper } from "./parameter";
-import { IndexedProperty, PropertyMetadataAny, PropertyValue, PropertyValues, RawValues, StationEvents, PropertyMetadataNumeric, PropertyMetadataBoolean, PropertyMetadataString, Schedule } from "./interfaces";
+import { IndexedProperty, PropertyMetadataAny, PropertyValue, PropertyValues, RawValues, StationEvents, PropertyMetadataNumeric, PropertyMetadataBoolean, PropertyMetadataString, Schedule, PropertyMetadataObject } from "./interfaces";
 import { encodePasscode, getBlocklist, getHB3DetectionMode, hexDate, hexTime, hexWeek, isGreaterEqualMinVersion, isNotificationSwitchMode, switchNotificationMode } from "./utils";
-import { StreamMetadata } from "../p2p/interfaces";
+import { DatabaseCountByDate, DatabaseQueryLatestInfo, DatabaseQueryLocal, StreamMetadata } from "../p2p/interfaces";
 import { P2PClientProtocol } from "../p2p/session";
-import { AlarmEvent, ChargingType, CommandType, ErrorCode, ESLBleCommand, ESLCommand, IndoorSoloSmartdropCommandType, LockV12P2PCommand, P2PConnectionType, PanTiltDirection, SmartSafeAlarm911Event, SmartSafeCommandCode, SmartSafeShakeAlarmEvent, VideoCodec, WatermarkSetting1, WatermarkSetting2, WatermarkSetting3, WatermarkSetting4 } from "../p2p/types";
+import { AlarmEvent, ChargingType, CommandType, DatabaseReturnCode, ErrorCode, ESLBleCommand, ESLCommand, FilterDetectType, FilterEventType, FilterStorageType, IndoorSoloSmartdropCommandType, LockV12P2PCommand, P2PConnectionType, PanTiltDirection, SmartSafeAlarm911Event, SmartSafeCommandCode, SmartSafeShakeAlarmEvent, TFCardStatus, VideoCodec, WatermarkSetting1, WatermarkSetting2, WatermarkSetting3, WatermarkSetting4 } from "../p2p/types";
 import { Address, CmdCameraInfoResponse, CommandResult, ESLStationP2PThroughData, LockAdvancedOnOffRequestPayload, AdvancedLockSetParamsType, PropertyData, CustomData, CommandData } from "../p2p/models";
 import { Device, DoorbellCamera, Lock, SmartSafe } from "./device";
 import { encodeLockPayload, encryptLockAESData, generateBasicLockAESKey, getLockVectorBytes, isPrivateIp, getSmartSafeP2PCommand, getLockV12P2PCommand, getLockP2PCommand } from "../p2p/utils";
@@ -44,13 +45,13 @@ export class Station extends TypedEmitter<StationEvents> {
 
     private pinVerified = false;
 
-    protected constructor(api: HTTPApi, station: StationListResponse, publicKey = "") {
+    protected constructor(api: HTTPApi, station: StationListResponse, ipAddress?: string, publicKey = "") {
         super();
         this.api = api;
         this.rawStation = station;
         this.lockPublicKey = publicKey;
         this.log = api.getLog();
-        this.p2pSession = new P2PClientProtocol(this.rawStation, this.api, publicKey);
+        this.p2pSession = new P2PClientProtocol(this.rawStation, this.api, ipAddress, publicKey);
         this.p2pSession.on("connect", (address: Address) => this.onConnect(address));
         this.p2pSession.on("close", () => this.onDisconnect());
         this.p2pSession.on("timeout", () => this.onTimeout());
@@ -82,6 +83,16 @@ export class Station extends TypedEmitter<StationEvents> {
         this.p2pSession.on("jammed", (channel: number) => this.onDeviceJammed(channel));
         this.p2pSession.on("low battery", (channel: number) => this.onDeviceLowBattery(channel));
         this.p2pSession.on("wrong try-protect alarm", (channel: number) => this.onDeviceWrongTryProtectAlarm(channel));
+        this.p2pSession.on("sd info ex", (sdStatus, sdCapacity, sdCapacityAvailable) => this.onSdInfoEx(sdStatus, sdCapacity, sdCapacityAvailable));
+        this.p2pSession.on("image download", (file, image) => this.onImageDownload(file, image));
+        this.p2pSession.on("tfcard status", (channel, status) => this.onTFCardStatus(channel, status));
+        this.p2pSession.on("database query latest", (returnCode, data) => this.onDatabaseQueryLatest(returnCode, data));
+        this.p2pSession.on("database query local", (returnCode, data) => this.onDatabaseQueryLocal(returnCode, data));
+        this.p2pSession.on("database count by date", (returnCode, data) => this.onDatabaseCountByDate(returnCode, data));
+        this.p2pSession.on("database delete", (returnCode, failedIds) => this.onDatabaseDelete(returnCode, failedIds));
+    }
+
+    protected initializeState(): void {
         this.update(this.rawStation);
         this.ready = true;
         setImmediate(() => {
@@ -89,13 +100,16 @@ export class Station extends TypedEmitter<StationEvents> {
         });
     }
 
-    static async initialize(api: HTTPApi, stationData: StationListResponse): Promise<Station> {
+    public initialize(): void {
+        this.initializeState();
+    }
+
+    static async getInstance(api: HTTPApi, stationData: StationListResponse, ipAddress?: string): Promise<Station> {
         let publicKey: string | undefined;
         if (Device.isLock(stationData.device_type)) {
             publicKey = await api.getPublicKey(stationData.station_sn, PublicKeyType.LOCK);
         }
-        const station = new Station(api, stationData, publicKey);
-        return station;
+        return new Station(api, stationData, ipAddress, publicKey);
     }
 
     public getStateID(state: string, level = 2): string {
@@ -122,9 +136,8 @@ export class Station extends TypedEmitter<StationEvents> {
     public update(station: StationListResponse, cloudOnlyProperties = false): void {
         this.rawStation = station;
         this.p2pSession.updateRawStation(station);
-
-        const metadata = this.getPropertiesMetadata();
-        for (const property of Object.values(metadata)) {
+        const metadata = this.getPropertiesMetadata(true);
+        for(const property of Object.values(metadata)) 
             if (this.rawStation[property.key] !== undefined && typeof property.key === "string") {
                 this.updateProperty(property.name, this.rawStation[property.key] as PropertyValue);
             } else if (this.properties[property.name] === undefined && property.default !== undefined && !this.ready) {
@@ -145,10 +158,9 @@ export class Station extends TypedEmitter<StationEvents> {
             || this.properties[name] === undefined) {
             const oldValue = this.properties[name];
             this.properties[name] = value;
-            if (this.ready)
-                this.emit("property changed", this, name, value);
+            this.emit("property changed", this, name, value, this.ready);
             try {
-                this.handlePropertyChange(this.getPropertyMetadata(name), oldValue, this.properties[name]);
+                this.handlePropertyChange(this.getPropertyMetadata(name, true), oldValue, this.properties[name]);
             } catch (error) {
                 if (error instanceof InvalidPropertyError) {
                     this.log.error(`Invalid Property ${name} error`, error);
@@ -215,7 +227,7 @@ export class Station extends TypedEmitter<StationEvents> {
                 }
             }
 
-            const metadata = this.getPropertiesMetadata();
+            const metadata = this.getPropertiesMetadata(true);
 
             for (const property of Object.values(metadata)) {
                 if (property.key === type) {
@@ -326,6 +338,9 @@ export class Station extends TypedEmitter<StationEvents> {
             } else if (property.type === "string") {
                 const stringProperty = property as PropertyMetadataString;
                 return value !== undefined ? value : (stringProperty.default !== undefined ? stringProperty.default : "");
+            } else if (property.type === "object") {
+                const objectProperty = property as PropertyMetadataObject;
+                return value !== undefined ? value : (objectProperty.default !== undefined ? objectProperty.default : undefined);
             }
         } catch (error) {
             this.log.error("Convert Error:", { property: property, value: value, error: error });
@@ -333,8 +348,8 @@ export class Station extends TypedEmitter<StationEvents> {
         return value;
     }
 
-    public getPropertyMetadata(name: string): PropertyMetadataAny {
-        const property = this.getPropertiesMetadata()[name];
+    public getPropertyMetadata(name: string, hidden = false): PropertyMetadataAny {
+        const property = this.getPropertiesMetadata(hidden)[name];
         if (property !== undefined)
             return property;
         throw new InvalidPropertyError(`Property ${name} invalid`);
@@ -361,13 +376,22 @@ export class Station extends TypedEmitter<StationEvents> {
     }
 
     public getProperties(): PropertyValues {
-        return this.properties;
+        const result: PropertyValues = {};
+        for (const property of Object.keys(this.properties)) {
+            if (!property.startsWith("hidden-"))
+                result[property] = this.properties[property];
+        }
+        return result;
     }
 
-    public getPropertiesMetadata(): IndexedProperty {
-        let metadata = StationProperties[this.getDeviceType()];
+    public getPropertiesMetadata(hidden = false): IndexedProperty {
+        let metadata = {
+            ...StationProperties[this.getDeviceType()]
+        };
         if (metadata === undefined) {
-            metadata = StationProperties[DeviceType.STATION];
+            metadata = {
+                ...StationProperties[DeviceType.STATION]
+            };
         }
         if (this.hasDeviceWithType(DeviceType.KEYPAD)) {
             metadata[PropertyName.StationGuardMode] = StationGuardModeKeyPadProperty;
@@ -376,11 +400,17 @@ export class Station extends TypedEmitter<StationEvents> {
             metadata[PropertyName.StationAutoEndAlarm] = StationAutoEndAlarmProperty;
             metadata[PropertyName.StationTurnOffAlarmWithButton] = StationTurnOffAlarmWithButtonProperty;
         }
+        if (!hidden) {
+            for (const property of Object.keys(metadata)) {
+                if (property.startsWith("hidden-"))
+                    delete metadata[property];
+            }
+        }
         return metadata;
     }
 
-    public hasProperty(name: string): boolean {
-        return this.getPropertiesMetadata()[name] !== undefined;
+    public hasProperty(name: string, hidden = false): boolean {
+        return this.getPropertiesMetadata(hidden)[name] !== undefined;
     }
 
     public getCommands(): Array<CommandName> {
@@ -485,6 +515,8 @@ export class Station extends TypedEmitter<StationEvents> {
             } else {
                 this.log.error(`Station.processPushNotification 4: ${message.device_sn} == ${this.getSerial()}, ${message.type}, ${message.event_type}`);
             }
+        } else if (message.msg_type === CusPushEvent.TFCARD && message.station_sn === this.getSerial() && message.tfcard_status !== undefined) {
+            this.updateRawProperty(CommandType.CMD_GET_TFCARD_STATUS, message.tfcard_status.toString());
         }
     }
 
@@ -674,13 +706,13 @@ export class Station extends TypedEmitter<StationEvents> {
         });
     }
 
-    public async getStorageInfo(): Promise<void> {
+    public async getStorageInfoEx(): Promise<void> {
         this.log.debug(`Sending get storage info command to station ${this.getSerial()}`);
-        //TODO: Verify channel! Should be 255...
         await this.p2pSession.sendCommandWithIntString({
             commandType: CommandType.CMD_SDINFO_EX,
             value: 0,
             valueSub: 0,
+            channel: 255,
             strValue: this.rawStation.member.admin_user_id
         });
     }
@@ -857,6 +889,9 @@ export class Station extends TypedEmitter<StationEvents> {
         this.terminating = false;
         this.resetCurrentDelay();
         this.log.info(`Connected to station ${this.getSerial()} on host ${address.host} and port ${address.port}`);
+        if (this.hasCommand(CommandName.StationDatabaseQueryLatestInfo)) {
+            this.databaseQueryLatestInfo();
+        }
         this.emit("connect", this);
     }
 
@@ -6138,7 +6173,7 @@ export class Station extends TypedEmitter<StationEvents> {
             this.p2pSession.startTalkback(device.getChannel());
             this.emit("command result", this, {
                 channel: device.getChannel(),
-                command_type: 0,
+                command_type: CommandType.CMD_START_TALKBACK,
                 return_code: 0,
                 customData: {
                     command: commandData
@@ -6183,7 +6218,7 @@ export class Station extends TypedEmitter<StationEvents> {
             this.p2pSession.stopTalkback(device.getChannel());
             this.emit("command result", this, {
                 channel: device.getChannel(),
-                command_type: 0,
+                command_type: CommandType.CMD_STOP_TALKBACK,
                 return_code: 0,
                 customData: {
                     command: commandData
@@ -6552,6 +6587,10 @@ export class Station extends TypedEmitter<StationEvents> {
 
     private onDeviceWrongTryProtectAlarm(channel: number): void {
         this.emit("device wrong try-protect alarm", this._getDeviceSerial(channel));
+    }
+
+    private onSdInfoEx(sdStatus: number, sdCapacity: number, sdAvailableCapacity: number): void {
+        this.emit("sd info ex", this, sdStatus, sdCapacity, sdAvailableCapacity);
     }
 
     public async setVideoTypeStoreToNAS(device: Device, value: VideoTypeStoreToNAS): Promise<void> {
@@ -7320,6 +7359,203 @@ export class Station extends TypedEmitter<StationEvents> {
         } else {
             throw new NotSupportedError(`This functionality is not implemented or supported by ${this.getSerial()}`);
         }
+    }
+
+    private onImageDownload(file: string, image: Buffer): void {
+        this.emit("image download", this, file, image);
+    }
+
+    public async downloadImage(cover_path: string): Promise<void> {
+        const commandData: CommandData = {
+            name: CommandName.StationDownloadImage,
+            value: cover_path
+        };
+        if (!this.hasCommand(CommandName.StationDownloadImage)) {
+            throw new NotSupportedError(`This functionality is not implemented or supported by ${this.getSerial()}`);
+        }
+        this.log.debug(`Sending download image command to station ${this.getSerial()} for file ${cover_path}`);
+        await this.p2pSession.sendCommandWithStringPayload({
+            commandType: CommandType.CMD_SET_PAYLOAD,
+            value: JSON.stringify({
+                account_id: this.rawStation.member.admin_user_id,
+                cmd: CommandType.CMD_DATABASE_IMAGE,
+                mChannel: Station.CHANNEL, //TODO: Check indoor devices
+                payload: [{ "file": cover_path }],
+                "transaction": cover_path
+            }),
+            channel: Station.CHANNEL, //TODO: Check indoor devices
+            strValueSub: this.rawStation.member.admin_user_id,
+        }, {
+            command: commandData,
+        });
+    }
+
+    private onTFCardStatus(channel: number, status: TFCardStatus): void {
+        this.updateRawProperty(CommandType.CMD_GET_TFCARD_STATUS, status.toString());
+    }
+
+    public async databaseQueryLatestInfo(): Promise<void> {
+        const commandData: CommandData = {
+            name: CommandName.StationDatabaseQueryLatestInfo,
+        };
+        if (!this.hasCommand(commandData.name)) {
+            throw new NotSupportedError(`This functionality is not implemented or supported by ${this.getSerial()}`);
+        }
+
+        this.log.debug(`Sending database query latest info command to station ${this.getSerial()}`);
+        await this.p2pSession.sendCommandWithStringPayload({
+            commandType: CommandType.CMD_SET_PAYLOAD,
+            value: JSON.stringify({
+                "account_id": this.rawStation.member.admin_user_id,
+                "cmd": CommandType.CMD_DATABASE,
+                "mChannel": 0,
+                "mValue3": 0,
+                "payload": {
+                    "cmd": CommandType.CMD_DATABASE_QUERY_LATEST_INFO,
+                    "table": "history_record_info",
+                    "transaction": `${new Date().getTime()}`
+                }
+            }),
+            channel: 0
+        }, {
+            command: commandData
+        });
+    }
+
+    public async databaseQueryLocal(serialNumbers: Array<string>, startDate: Date, endDate: Date, eventType: FilterEventType = 0, detectionType: FilterDetectType = 0, storageType: FilterStorageType = 0): Promise<void> {
+        const commandData: CommandData = {
+            name: CommandName.StationDatabaseQueryLocal,
+            value: {
+                serialNumbers: serialNumbers,
+                eventType: eventType,
+                detectionType: detectionType
+            }
+        };
+        if (!this.hasCommand(commandData.name)) {
+            throw new NotSupportedError(`This functionality is not implemented or supported by ${this.getSerial()}`);
+        }
+
+        this.log.debug(`Sending database query local command to station ${this.getSerial()}`, { serialNumbers: serialNumbers, startDate: startDate, endDate: endDate, eventType: eventType, detectionType:detectionType, storageType: storageType });
+        const devices: Array<{ device_sn: string; }> = [];
+        for(const serial of serialNumbers) {
+            devices.push({ device_sn: serial });
+        }
+        await this.p2pSession.sendCommandWithStringPayload({
+            commandType: CommandType.CMD_SET_PAYLOAD,
+            value: JSON.stringify({
+                "account_id": this.rawStation.member.admin_user_id,
+                "cmd": CommandType.CMD_DATABASE,
+                "mChannel": 0,
+                "mValue3": 0,
+                "payload": {
+                    "cmd": CommandType.CMD_DATABASE_QUERY_LOCAL,
+                    "payload":{
+                        "count": 20,
+                        "detection_type": detectionType,
+                        "device_info": devices,
+                        "end_date": date.format(endDate, "YYYYMMDD"),
+                        "event_type": eventType,
+                        "flag": 0,
+                        "res_unzip": 1,
+                        "start_date": date.format(startDate, "YYYYMMDD"),
+                        "start_time": `${date.format(endDate, "YYYYMMDD")}000000`,
+                        "storage_cloud": storageType === FilterStorageType.NONE || (storageType !== FilterStorageType.LOCAL && storageType !== FilterStorageType.CLOUD) ? -1 : storageType,
+                        "ai_type": 0
+                    },
+                    "table": "history_record_info",
+                    "transaction": `${new Date().getTime()}`
+                }
+            }),
+            channel: 0
+        }, {
+            command: commandData
+        });
+    }
+
+    public async databaseDelete(ids: Array<number>): Promise<void> {
+        const commandData: CommandData = {
+            name: CommandName.StationDatabaseDelete,
+            value: ids
+        };
+        if (!this.hasCommand(commandData.name)) {
+            throw new NotSupportedError(`This functionality is not implemented or supported by ${this.getSerial()}`);
+        }
+
+        this.log.debug(`Sending database delete command to station ${this.getSerial()}`, { ids: ids });
+        const lids: Array<{ "id": number; }> = [];
+        for (const id of ids) {
+            lids.push({ "id": id });
+        }
+        await this.p2pSession.sendCommandWithStringPayload({
+            commandType: CommandType.CMD_SET_PAYLOAD,
+            value: JSON.stringify({
+                "account_id": this.rawStation.member.admin_user_id,
+                "cmd": CommandType.CMD_DATABASE,
+                "mChannel": 0,
+                "mValue3": 0,
+                "payload": {
+                    "cmd": CommandType.CMD_DATABASE_DELETE,
+                    "payload": lids,
+                    "table": "history_record_info",
+                    "transaction": `${new Date().getTime()}`
+                }
+            }),
+            channel: 0
+        }, {
+            command: commandData
+        });
+    }
+
+    public async databaseCountByDate(startDate: Date, endDate: Date): Promise<void> {
+        const commandData: CommandData = {
+            name: CommandName.StationDatabaseCountByDate,
+            value: {
+                startDate: startDate,
+                endDate: endDate
+            }
+        };
+        if (!this.hasCommand(commandData.name)) {
+            throw new NotSupportedError(`This functionality is not implemented or supported by ${this.getSerial()}`);
+        }
+
+        this.log.debug(`Sending database count by date command to station ${this.getSerial()}`, { startDate: startDate, endDate: endDate });
+        await this.p2pSession.sendCommandWithStringPayload({
+            commandType: CommandType.CMD_SET_PAYLOAD,
+            value: JSON.stringify({
+                "account_id": this.rawStation.member.admin_user_id,
+                "cmd": CommandType.CMD_DATABASE,
+                "mChannel": 0,
+                "mValue3": 0,
+                "payload": {
+                    "cmd": CommandType.CMD_DATABASE_COUNT_BY_DATE,
+                    "payload": {
+                        "end_date": date.format(endDate, "YYYYMMDD"),
+                        "start_date": date.format(startDate, "YYYYMMDD"),
+                    },
+                    "table": "history_record_info",
+                    "transaction": `${new Date().getTime()}`
+                }
+            }),
+            channel: 0
+        }, {
+            command: commandData
+        });
+    }
+
+    private onDatabaseQueryLatest(returnCode: DatabaseReturnCode, data: Array<DatabaseQueryLatestInfo>): void {
+        this.emit("database query latest", this, returnCode, data);
+    }
+
+    private onDatabaseQueryLocal(returnCode: DatabaseReturnCode, data: Array<DatabaseQueryLocal>): void {
+        this.emit("database query local", this, returnCode, data);
+    }
+
+    private onDatabaseCountByDate(returnCode: DatabaseReturnCode, data: Array<DatabaseCountByDate>): void {
+        this.emit("database count by date", this, returnCode, data);
+    }
+
+    private onDatabaseDelete(returnCode: DatabaseReturnCode, failedIds: Array<unknown>): void {
+        this.emit("database delete", this, returnCode, failedIds);
     }
 
 }

@@ -11,9 +11,9 @@ import { ResultResponse, LoginResultResponse, TrustDevice, Cipher, Voice, EventR
 import { HTTPApiEvents, Ciphers, FullDevices, Hubs, Voices, Invites, HTTPApiRequest, HTTPApiPersistentData, Houses, LoginOptions } from "./interfaces";
 import { EventFilterType, PublicKeyType, ResponseErrorCode, StorageType, VerfyCodeTypes } from "./types";
 import { ParameterHelper } from "./parameter";
-import { encryptAPIData, decryptAPIData, getTimezoneGMTString } from "./utils";
+import { encryptAPIData, decryptAPIData, getTimezoneGMTString, decodeImage } from "./utils";
 import { InvalidCountryCodeError, InvalidLanguageCodeError } from "./../error";
-import { md5, mergeDeep } from "./../utils";
+import { md5, mergeDeep, parseJSON } from "./../utils";
 import { ApiBaseLoadError, ApiGenericError, ApiHTTPResponseCodeError, ApiInvalidResponseError, ApiResponseCodeError } from "./error";
 
 export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
@@ -54,7 +54,7 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
     };
 
     private headers: Record<string, string> = {
-        App_version: "v4.5.1_1523",
+        App_version: "v4.6.0_1630",
         Os_type: "android",
         Os_version: "31",
         Phone_model: "ONEPLUS A3003",
@@ -490,9 +490,11 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                 if (response.status == 200) {
                     const result: ResultResponse = response.data;
                     if (result.code == 0) {
-                        const stationList = this.decryptAPIData(result.data) as Array<StationListResponse>;
-                        this.log.debug("Decrypted station list data", stationList);
-                        return stationList;
+                        if (result.data) {
+                            const stationList = this.decryptAPIData(result.data) as Array<StationListResponse>;
+                            this.log.debug("Decrypted station list data", stationList);
+                            return stationList;
+                        }
                     } else {
                         this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
@@ -525,9 +527,11 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                 if (response.status == 200) {
                     const result: ResultResponse = response.data;
                     if (result.code == 0) {
-                        const deviceList = this.decryptAPIData(result.data) as Array<DeviceListResponse>;
-                        this.log.debug("Decrypted device list data", deviceList);
-                        return deviceList;
+                        if (result.data) {
+                            const deviceList = this.decryptAPIData(result.data) as Array<DeviceListResponse>;
+                            this.log.debug("Decrypted device list data", deviceList);
+                            return deviceList;
+                        }
                     } else {
                         this.log.error("Response code not ok", { code: result.code, msg: result.msg });
                     }
@@ -548,11 +552,10 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
             houses.forEach(element => {
                 this.houses[element.house_id] = element;
             });
-            if (Object.keys(this.houses).length > 0)
-                this.emit("houses", this.houses);
         } else {
             this.log.info("No houses found.");
         }
+        this.emit("houses", this.houses);
     }
 
     public async refreshStationData(): Promise<void> {
@@ -562,11 +565,10 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
             stations.forEach(element => {
                 this.hubs[element.station_sn] = element;
             });
-            if (Object.keys(this.hubs).length > 0)
-                this.emit("hubs", this.hubs);
         } else {
             this.log.info("No stations found.");
         }
+        this.emit("hubs", this.hubs);
     }
 
     public async refreshDeviceData(): Promise<void> {
@@ -576,11 +578,10 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
             devices.forEach(element => {
                 this.devices[element.device_sn] = element;
             });
-            if (Object.keys(this.devices).length > 0)
-                this.emit("devices", this.devices);
         } else {
             this.log.info("No devices found.");
         }
+        this.emit("devices", this.devices);
     }
 
     public async refreshAllData(): Promise<void> {
@@ -598,11 +599,12 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
 
     // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
     public async request(request: HTTPApiRequest): Promise<ApiResponse> {
-        this.log.debug("Request:", { method: request.method, endpoint: request.endpoint, token: this.token, data: request.data });
+        this.log.debug("Request:", { method: request.method, endpoint: request.endpoint, responseType: request.responseType, token: this.token, data: request.data });
         try {
             const internalResponse = await this.requestEufyCloud(request.endpoint, {
                 method: request.method,
                 json: request.data,
+                responseType: request.responseType !== undefined ? request.responseType : "json"
             });
             const response: ApiResponse = {
                 status: internalResponse.statusCode,
@@ -871,12 +873,17 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                 if (response.status == 200) {
                     const result: ResultResponse = response.data;
                     if (result.code == 0) {
-                        const dataresult: Array<EventRecordResponse> = this.decryptAPIData(result.data);
-                        if (dataresult) {
-                            dataresult.forEach(record => {
-                                this.log.debug(`${functionName} - Record:`, record);
-                                records.push(record);
-                            });
+                        if (result.data) {
+                            const dataresult: Array<EventRecordResponse> = this.decryptAPIData(result.data);
+                            this.log.debug(`${functionName} - Decrypted data:`, dataresult);
+                            if (dataresult) {
+                                dataresult.forEach(record => {
+                                    this.log.debug(`${functionName} - Record:`, record);
+                                    records.push(record);
+                                });
+                            }
+                        } else {
+                            this.log.error("Response data is missing", {code: result.code, msg: result.msg, data: result.data });
                         }
                     } else {
                         this.log.error(`${functionName} - Response code not ok`, { code: result.code, msg: result.msg });
@@ -943,7 +950,10 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
                             const invites: Invites = {};
                             result.data.forEach((invite: Invite) => {
                                 invites[invite.invite_id] = invite;
-                                invites[invite.invite_id].devices = JSON.parse((invites[invite.invite_id].devices as unknown) as string);
+                                let data = parseJSON((invites[invite.invite_id].devices as unknown) as string, this.log);
+                                if (data === undefined)
+                                    data = [];
+                                invites[invite.invite_id].devices = data;
                             });
                             return invites;
                         }
@@ -1021,23 +1031,25 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         return "";
     }
 
-    public decryptAPIData(data: string, json = true): any {
-        let decryptedData: Buffer | undefined;
-        try {
-            decryptedData = decryptAPIData(data, this.ecdh.computeSecret(Buffer.from(this.persistentData.serverPublicKey, "hex")));
-        } catch (error) {
-            this.log.error("Data decryption error, invalidating session data and reconnecting...", error);
-            this.persistentData.serverPublicKey = this.SERVER_PUBLIC_KEY;
-            this.invalidateToken();
-            this.emit("close");
-        }
-        if (decryptedData) {
+    public decryptAPIData(data?: string, json = true): any {
+        if (data) {
+            let decryptedData: Buffer | undefined;
+            try {
+                decryptedData = decryptAPIData(data, this.ecdh.computeSecret(Buffer.from(this.persistentData.serverPublicKey, "hex")));
+            } catch (error) {
+                this.log.error("Data decryption error, invalidating session data and reconnecting...", error);
+                this.persistentData.serverPublicKey = this.SERVER_PUBLIC_KEY;
+                this.invalidateToken();
+                this.emit("close");
+            }
+            if (decryptedData) {
+                if (json)
+                    return parseJSON(decryptedData.toString("utf-8"), this.log);
+                return decryptedData.toString();
+            }
             if (json)
-                return JSON.parse(decryptedData.toString());
-            return decryptedData.toString();
+                return {};
         }
-        if (json)
-            return {};
         return undefined;
     }
 
@@ -1371,5 +1383,32 @@ export class HTTPApi extends TypedEmitter<HTTPApiEvents> {
         }
         return false;
     }
+
+    public async getImage(deviceSN: string, url: string): Promise<Buffer> {
+        if (this.connected) {
+            try {
+                const device = this.devices[deviceSN];
+                if (device) {
+                    const station = this.hubs[device.station_sn];
+                    if (station) {
+                        const response = await this.request({
+                            method: "GET",
+                            endpoint: new URL(url),
+                            responseType: "buffer"
+                        });
+                        if (response.status == 200) {
+                            return decodeImage(station.p2p_did, response.data as Buffer);
+                        } else {
+                            this.log.error("Status return code not 200", { status: response.status, statusText: response.statusText });
+                        }
+                    }
+                }
+            } catch (error) {
+                this.log.error("Generic Error:", error);
+            }
+        }
+        return Buffer.alloc(0);
+    }
+
 
 }

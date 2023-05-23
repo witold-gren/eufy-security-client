@@ -80,6 +80,59 @@ Please use GitHub issues for this.
 
 ## Changelog
 
+### 2.6.2 (2023-05-16)
+
+* (bropat) Fixed issue waiting for device/station loading event in some cases
+* (martijnpoppen) FIX: doorbell push not parsed when connected to HB3 #325
+
+### 2.6.1 (2023-05-13)
+
+* (bropat) Fixed an issue that caused the event "livestream started" to be emit twice
+* (bropat) Added some missing properties (package detection) for doorbell solo (T8203)
+* (bropat) Migrated from dependency protobuf-typescript to protobufjs
+
+### 2.6.0 (2023-05-12)
+
+* (bropat) Implemented access to local event history (database on station)
+* (bropat) Implemented download of first picture from local database for supported devices
+* (martijnpoppen) FIX: HB3 notifications - (exclude sensors) #324
+
+### 2.5.1 (2023-05-07)
+
+* (bropat) Fixed issue in downloading `cover_path` picture for supported devices
+
+### 2.5.0 (2023-05-07)
+
+* (bropat) **Breaking Change** `picture_url` property is now hidden and was replaced by `picture` property for supported devices
+* (bropat) Implemented new push notification picture gathering and decryption
+* (bropat) Fixed sdcard info gathering for devices without sdcard inserted
+
+### 2.4.4 (2023-04-21)
+
+* (bropat) Implemented feature request #313
+* (bropat) Fixed issue #316
+* (bropat) Updated versions of the package dependencies
+
+### 2.4.3 (2023-04-11)
+
+* (martijnpoppen) FIX: HB3 connected sensors not reporting (#314)
+* (PhilippEngler) Fix problem when the P2PDID number is starting with zeros
+* (bropat) Updated versions of the package dependencies
+
+### 2.4.2 (2023-02-23)
+
+* (bropat) Improved local discovery of stations over p2p
+* (bropat) Fixed issue in API communication when no stations and devices are found
+
+### 2.4.1 (2023-02-19)
+
+* (bropat) Added support for configuring a suggested IP address for a station
+* (bropat) Fixed json parse issue with null-terminated strings
+* (bropat) Fixed p2p keepalive issue
+* (bropat/martijnpoppen) Fixed Invalid Property personDetected error for some floodlight cams
+* (PhilippEngler) Finished implementation of getStorageInfo
+* (bropat) Removed dependency mediainfo.js
+
 ### 2.4.0 (2022-12-24)
 
 * (bropat) Implemented new encrypted cloud API communication (v2)
@@ -671,7 +724,7 @@ Please use GitHub issues for this.
 
 MIT License
 
-Copyright (c) 2022 bropat <patrick.broetto@gmail.com>
+Copyright (c) 2021-2023 bropat <patrick.broetto@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

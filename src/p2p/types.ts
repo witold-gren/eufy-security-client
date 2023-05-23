@@ -512,6 +512,22 @@ export enum CommandType {
     CMD_GET_RECORDED_EVENTS_HB3 = 1193,
     CELLULAR_INFO = 7002,
     CELLULAR_SIGNAL_STRENGTH = 7006,
+    CMD_DATABASE_COUNT = 10005,
+    CMD_DATABASE_COUNT_BY_DEVICE = 10012,
+    CMD_DATABASE_COUNT_BY_DATE = 10008,
+    CMD_DATABASE_DELETE = 10001,
+    CMD_DATABASE_DOWNLOAD = 8001,
+    CMD_DATABASE_IMAGE = 1308,
+    CMD_DATABASE_QUERY = 10000,
+    CMD_DATABASE_QUERY_BY_DATE = 10006,
+    CMD_DATABASE_QUERY_COMBINATION = 10009,
+    CMD_DATABASE_QUERY_COMBINATION_WITH_AI = 10011,
+    CMD_DATABASE_QUERY_LATEST_INFO = 10013,
+    CMD_DATABASE_SYNC = 10003,
+    CMD_DATABASE_UPDATE = 10002,
+    CMD_DATABASE = 1306,
+    CMD_SYNC_QUERY_RECENT_PACKAGE_INFO = 10018,
+    CMD_DATABASE_QUERY_LOCAL = 10017,
 }
 
 export enum MessageType {
@@ -619,6 +635,35 @@ export enum ErrorCode {
     ERROR_LIMIT_REACHED = -500,
     ERROR_FAILED_TO_REQUEST = 503,
     ERROR_SEQUENCE_NUMBER = -151,
+}
+
+export enum TFCardStatus {
+    NULL = -1,
+    NORMAL = 0,
+    NON_ORIGINAL = 1,
+    MOUNT_FAIL = 2,
+    FORMAT_FAIL = 3,
+    REMOVE = 4,
+    FORMATING = 5,
+    BUSY = 6,
+    E2FSCK_FAIL_MOUNT_RW = 7,
+    E2FSCK_FAIL_MOUNT_FAIL_REINSERT = 8,
+    E2FSCK_FAIL_MOUNT_RO = 9,
+    E2FSCK_FAIL_MOUNT_RW_ERR = 10,
+    REPAIRING = 11,
+    MOUNT_FAIL_E2FSCK_ERROR = 12,
+    MOUNT_FAIL_E2FSCK_TIMEOUT = 13,
+    MOUNT_RW_E2FSCK_ERROR = 14,
+    MOUNT_RW_E2FSCK_TIMEOUT = 15,
+    MOUNT_RO_E2FSCK_OK = 16,
+    MOUNT_RO_E2FSCK_ERROR = 17,
+    MOUNT_RO_E2FSCK_TIMEOUT = 18,
+    MOUNT_RERR_E2FSCK_OK = 19,
+    MOUNT_RERR_E2FSCK_ERROR = 20,
+    MOUNT_RERR_E2FSCK_TIMEOUT = 21,
+    UNNORMAL_IO_ERROR = 22,
+    RISK = 23,
+    MOUNTING = 24
 }
 
 export enum AlarmEvent {
@@ -927,6 +972,53 @@ export enum SmartSafeBatteryTemperatureEvent {
 export enum SmartSafeBatteryStatusEvent {
     NOT_CHARGING = 0,
     CHARGING = 1,
+}
+
+export enum DatabaseReturnCode {
+    ERROR_DB_NOT_READY = -1100,
+    SUCCESSFUL = 0,
+}
+
+export enum P2PStorageType {
+    NONE = 0,
+    EMMC = 1,
+    HD = 2,
+    SDCARD = 3,
+    SENSOR = 4,
+    ALARM = 5,
+}
+
+export enum FilterStorageType {
+    NONE = 0,
+    LOCAL = 1,
+    CLOUD = 2,
+}
+
+export enum FilterEventType {
+    ALL = 0,
+    VIDEO = 1,
+    ALERT = 2,
+}
+
+export enum FeatureTag {
+    USER = 0,
+    STRANGER = 1,
+    SELF_LEARNING_NO_CONFIRM = 2,
+    SELF_LEARNING_CONFIRM = 3,
+    SELF_LEARNING_ERROR_CONFIRM = 4,
+}
+
+export enum FilterDetectType {
+    NOT_SUPPORT = 0,
+    PERSON_FACE = 1,
+    PERSON_BODY = 2,
+    VEHICLE = 4,
+    PET = 8,
+    SOUND = 128,
+    CRYING = 256,
+    PACKAGE = 512,
+    PACKAGE_PICK_UP = 512,
+    PACKAGE_DELIVERED = 1024,
 }
 
 /*export interface Mapping {
